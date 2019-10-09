@@ -1,0 +1,12 @@
+.title-slide hgroup h1{
+    font-size: 65px;
+    line-height: 1.4;
+    letter-spacing: -3px;
+    color: #006400;
+}
+
+
+.small {
+    font-size: 11px;
+    line-height: 10px;
+}
