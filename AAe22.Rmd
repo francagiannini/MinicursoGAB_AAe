@@ -42,29 +42,37 @@ Se calcula el error de estimación (diferencia entre el valor estimado y el valo
 
 Análisis estadístico de los errores cometidos en todos los sitios con datos.
 
-## Validación cruzada k-fold 
-```{r, echo=FALSE, out.width=4}
+
+- Validación cruzada k-fold 
+
+
+```{r, echo=FALSE}
 knitr::include_graphics("VC1.jpg")
 ```
 
 ## Validación Cruzada
 
-- Medidas 
+Medidas 
 
--Error medio
+- Error medio
 $$ME={\frac{1}{2}}\sum_{i=1}^{N}(z(x_0)-\hat Z(x_0))$$
 
 - Error cuadrático medio
 
 $$MSE= {\frac{1}{2}}\sum_{i=1}^{N}(z(x_0)-\hat Z(x_0))^2$$
 
-## Validación Cruzada
+- Raiz cuadrada del error cuadrático medio
+
+$$RMSE= \sqrt{{\frac{1}{2}}\sum_{i=1}^{N}(z(x_0)-\hat Z(x_0))^2}$$
+
 - Error cuadrático medio normalizado
 
 Normalizado por la varianza kriging
 
 $$ MSE= {\frac{1}{2}}\sum_{i=1}^{N}\frac{(z(x_0)-\hat Z(x_0))^2} {\hat\sigma^{2}(x_i)}$$
-```{r, echo=TRUE}
+
+## Evaluación predictiva de los modelos
+```{r, echo=TRUE, message=FALSE}
 mod_exp
 mod_esf
 
@@ -107,25 +115,28 @@ cor(kricv_mod_exp$observed, kricv_mod_exp$observed - kricv_mod_exp$residual)
 par(mfrow=c(1,2))
 plot(kricv_mod_esf$observed,kricv_mod_esf$observed - kricv_mod_esf$residual, xlab="Observados", ylab="Predichos")
 plot(kricv_mod_exp$observed,kricv_mod_exp$observed - kricv_mod_exp$residual,xlab="Observados", ylab="Predichos")
-
-
 ```
 
 ## Kriging regresión
-```{r, echo=FALSE}
-knitr::include_graphics("RK1.jpg")
+```{r, echo=FALSE, message=FALSE}
+knitr::include_graphics("RK2.png")
 ```
 
 ## Kriging regresión
-```{r, echo=TRUE}
+
+Paso 1, Ajustamos un modelo lineal múltiple
+```{r, echo=TRUE, message=FALSE}
 #1 Ajuste de modelo de RLM
 mlr <- lm(VUT~g_porc_edi+ d_supcom + d_centro + d_indust + d_front , datos)
+```
 
-#2 Incorporamos los residuos del MLR a la base de datos
+Paso 2, Kriging sobre los residuos
+```{r, echo=TRUE, message=FALSE}
+#Incorporamos los residuos del MLR a la base de datos
 datos$residuos <-mlr$residuals
 names(datos)
 
-#3 Ajuste de semivariograma experimetal y te?rico a los reiuduos
+#Ajuste de semivariograma experimetal y teórico a los reiuduos
 semiv_rk <- variogram(residuos~1 , datos)
 plot(semiv_rk)
 
@@ -135,29 +146,41 @@ plot(semiv_rk)
 v.fit_vut_rk <- fit.variogram(semiv_rk ,vgm(c("Exp","Sph","Gau")))
 plot(semiv_rk ,v.fit_vut_rk)
 
-#4 Kriging sobre residuos
+# Kriging sobre residuos
 kgres <- krige(residuos~1, datos, ejes, model = v.fit_vut_rk)
 spplot(kgres["var1.pred"], main = "Kriging Residual: Predicciones", col.regions=terrain.colors(20))
+```
 
+Paso 3, Predicción
+```{r, echo=TRUE, message=FALSE}
 #5 Predicción final
 ejes$RK_pred <- predict(mlr, newdata=ejes) + kgres$var1.pred
 
-spplot(ejes["RK_pred"], main = "Predicci?n RK", col.regions=terrain.colors(20))
+spplot(ejes["RK_pred"], main = "Predicción RK", col.regions=terrain.colors(20))
+```
 
+Visualización RK
+```{r, echo=TRUE, message=FALSE}
 mapapred_ejesRK <- mapview(ejes, zcol = "RK_pred", ceX ="RK_pred",col.regions =  cols, layer.name ="Predicho Ejes RK", alpha=0)
+
+muestra <- mapview(datos,zcol = "VUT", ceX ="VUT", layer.name ="Muestra", col.regions = cols, alpha=0)
+
+mapapred_grilla <- mapview(pred_grilla,legend=T, col.regions =  cols, layer.name ="Predichos Grilla",na.color = "transparent")
+
+mapapred_ejes <- mapview(kriging_ejes, zcol = "var1.pred", ceX ="var1.pred",col.regions =  cols, layer.name ="Predicho Ejes", alpha=0) 
 
 muestra +  mapapred_grilla + mapapred_ejes + mapapred_ejesRK
 ```
 
-## Árboles de Regresión y Clasificación
+## Árboles de Regresión
 
-La regresión lineal genera modelos globales en los que una única ecuación se aplica a todo el espacio muestral y puede emplearse con fines predictivos
+La regresión lineal genera modelos globales en los que una única función se aplica a todo el espacio muestral y puede emplearse con fines predictivos
 
 Cuando el estudio implica múltiples predictores, que interaccionan entre ellos de forma compleja y no lineal los modelos de regresión lineal no son plausibles de emplearse
 
 Los algoritmos basados en árboles engloban a un conjunto de técnicas supervisadas no paramétricas que consiguen segmentar el espacio de los predictores en regiones simples
 
-## Árboles de Regresión y Clasificación
+## Árboles de Regresión
 
 - Ventajas
 
@@ -170,8 +193,6 @@ No asume ningún tipo de supuesto distribucional
 Permiten identificar las variables regresoras más importantes
 
 Pueden usarse para la selección de variables predictoras
-
-## Árboles de Regresión y Clasificación
 
 - Desventajas
 
@@ -191,8 +212,6 @@ La suma de cuadrados residual $SCR$ es el criterio por el cual se determina dond
 
 $$SCR=\sum_{i=j}^{j}\sum_{ieR_j}(y_i-\hat y_{N_j})^2$$
 siendo $\hat y_{N_j}$ la media de la variable respuesta en el nodo $j$
-
-## Generación del Árbol
 
 El proceso finaliza cuando:
 
@@ -215,10 +234,11 @@ Los algoritmos de ensamblaje combinan predicciones de múltiples modelos en un �
 
 El mejor modelo es aquel que consigue un equilibro óptimo entre sesgo y varianza
 
-##Ejemplo Arbol de regresión
 
-```{r, echo=FALSE, out.width=4}
-knitr::include_graphics("cart.jpg")
+## Arbol de regresión
+
+```{r, echo=FALSE,message=FALSE}
+#knitr::include_graphics("CART2.jpg")
 ```
 
 ## Métodos de Ensamblaje
@@ -251,31 +271,36 @@ Valor recomendado del hiperparámetro es  $m= \sqrt p$ (clasificación) y $m=\fr
 
 ## RF regresión
 
-```{r, echo=FALSE, out.width=4}
-knitr::include_graphics("RF1.jpg")
+```{r, echo=FALSE, fig.dim=0.2}
+#knitr::include_graphics("RF1.jpg")
 ```
 
 ## RF Regresión
-
-```{r, echo=TRUE}
+Paso 1, para ajustar el modelo RF debemos decidir el valor del parámetro "mtry"
+```{r, echo=TRUE, message=FALSE}
 datos <- read.table("datosSF_depurados.txt", header = T)
 
-#1 Ajuste del RF con librer?a caret
+#Ajuste del RF con librería caret
 seed <-7
 
-#2 grilla de valores para mtry a evaluar
+# grilla de valores para mtry a evaluar
 mtry <-expand.grid(mtry=seq(2,5,1)) 
 
-#3 opciones de validaci?n
+#opciones de validación
 fitControl <- trainControl(method = "cv",number=10, allowParallel = T)
-
+```
+Podemos paralelizar el proceso computacional 
+```{r, echo=TRUE, message=FALSE}
 # opciones para praralelizado 
 # library(parallel)
 # library(doParallel)
 # cluster <- makeCluster(detectCores() - 1) 
 # registerDoParallel(cluster)
+```
 
-#4 ajuste del modelo de RF
+Paso 2, ajustamos el modelo RF con "mtry" óptimo
+```{r, echo=TRUE, message=FALSE}
+#ajustamos el modelo de RF
 set.seed(seed)
 train_rf <- train(VUT ~ g_porc_edi + d_supcom + d_centro + d_indust + d_front, 
                   data=datos,
@@ -283,11 +308,14 @@ train_rf <- train(VUT ~ g_porc_edi + d_supcom + d_centro + d_indust + d_front,
                   importance=T,
                   tuneGrid =mtry,
                   trControl = fitControl)
+```
 
-#5 Incorporamos los residuos del MLR a la base de datos
+Paso 3, Kriging sobre los residuos
+```{r, echo=TRUE, message=FALSE}
+#Incorporamos los residuos del MLR a la base de datos
 datos$residuosRF <-datos$VUT - predict(train_rf, newdata=datos)
 
-#6 Ajuste de semivariograma experimetal y teórico a los residuos del RF
+#Ajuste de semivariograma experimetal y teórico a los residuos del RF
 coordinates(datos) <- c("x", "y")
 crs(datos) <- CRS("+init=epsg:22174")
 
@@ -300,15 +328,21 @@ plot(semiv_RFk)
 v.fit_vut_RFk <- fit.variogram(semiv_RFk ,vgm(c("Exp","Sph","Gau")))
 plot(semiv_RFk ,v.fit_vut_RFk)
 
-#7 Kriging sobre residuos del RF
+#Kriging sobre residuos del RF
 kgresRF <- krige(residuosRF~1, datos, ejes, model = v.fit_vut_RFk)
 spplot(kgresRF["var1.pred"], main = "Kriging Residual (RF): Predicciones", col.regions=terrain.colors(20))
+```
 
-#8 Predicción final RF
+Paso 4, predicción
+```{r, echo=TRUE, message=FALSE}
+#Predicción final RF
 ejes$RFK_pred <- predict(train_rf, newdata=ejes) + kgresRF$var1.pred
 
-spplot(ejes["RFK_pred"], main = "Predicci?n RFK", col.regions=terrain.colors(20))
+spplot(ejes["RFK_pred"], main = "Predicción RFK", col.regions=terrain.colors(20))
+```
 
+Visualización predicción
+```{r, echo=TRUE, message=FALSE}
 mapapredejes_RFK <- mapview(ejes, zcol = "RFK_pred", ceX ="RFK_pred",col.regions =  cols, layer.name ="Predicho Ejes RFK", alpha=0)
 
 muestra +  mapapred_grilla + mapapred_ejes +  mapapred_ejesRK + mapapredejes_RFK
@@ -316,7 +350,8 @@ muestra +  mapapred_grilla + mapapred_ejes +  mapapred_ejesRK + mapapredejes_RFK
 
 ## Evaluación y validación de modelos
 
-```{r, echo=TRUE}
+Usamos la siguiente función
+```{r, echo=TRUE, message=FALSE}
 #Función validación
 validacion <-function (fold, base, var.y) {
   require(caret)
@@ -350,7 +385,7 @@ validacion <-function (fold, base, var.y) {
   coordinates(test_ko)<-~x+y
   vario <- variogram(Y ~1, train_ko)
   VF_vut_KO <- fit.variogram(vario, vgm(c("Sph", "Exp", "Gau"))) 
-  KO <- krige(Y~ 1, train_ko, test_ko, VF_vut_KO)
+  KO <- krige(Y~ 1, train_ko, test_ko, VF_vut_KO, debug.level=0)
   
   # Regression Kriging  
   train_ko = training
@@ -369,7 +404,7 @@ validacion <-function (fold, base, var.y) {
   vario_rk <- variogram(error_rk~1, train_ko, cutoff=2300)
   model_rk_ko <- fit.variogram(vario_rk, vgm(c("Sph", "Exp", "Gau"))) 
 
-  test_k <- krige(error_rk~ 1 , train_ko, test_ko, model_rk_ko)
+  test_k <- krige(error_rk~ 1 , train_ko, test_ko, model_rk_ko, debug.level=0)
   test_rk_ko <- pred_mlr + test_k$var1.pred
   
   # Random Forest 
@@ -401,7 +436,7 @@ validacion <-function (fold, base, var.y) {
   
   model_rf_ko <- fit.variogram(vario_rf, vgm(c("Sph","Exp", "Gau"))) 
   
-  test_ko <- krige(error_rf~ 1 , train_ko, test_ko, model_rf_ko) 
+  test_ko <- krige(error_rf~ 1 , train_ko, test_ko, model_rf_ko, debug.level=0) 
   
   test_rf_ko <- test_rf + test_ko$var1.pred
   
@@ -454,7 +489,7 @@ resumen <- function (j) {
 Agricultura de precisión
 
 Modelar rendimiento "RindeSoja"
-```{r, echo=TRUE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 resultadosAP <- do.call(rbind,lapply(1:10, validacion,base="datosAP.txt", var.y="RindeSoja"))
 head(resultadosAP)
 
@@ -470,7 +505,7 @@ Suelos Meuse
 Polución y calidad del suelo
 
 Modelar "om" Materia Orgánica  
-```{r, echo=TRUE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 resultados_meuse <- do.call(rbind,lapply(1:10, validacion,base="meuse.txt", var.y="om"))
 head(resultados_meuse)
 
@@ -484,22 +519,26 @@ tablafinal_meuse
 Petrel "mud content"
 
 Modelar "mud", contenido de lodo
-```{r, echo=TRUE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+# mud es asimetrica!!!
 resultados_petrel <- do.call(rbind,lapply(1:10, validacion,base="petrel.txt", var.y="mud"))
 head(resultados_petrel)
 
 tabla <- resultados_petrel[,4:8]
 
 tablafinal_petrel <- do.call("rbind",lapply(2:5,resumen)) 
-tablafinal_petrel # mud es asimetrica!!!
+tablafinal_petrel 
 ```
 
 ## Muchas Gracias
 
 ```{r, purl=FALSE}
-#knitr::include_graphics("http://giphygifs.s3.amazonaws.com/media/6fScAIQR0P0xW/giphy.gif")
+knitr::include_graphics("http://giphygifs.s3.amazonaws.com/media/6fScAIQR0P0xW/giphy.gif")
 ```
 
-**marianoacba@agro.unc.edu.ar**
-**francagianninikurina@gmail.com**
+<marianoacba@agro.unc.edu.ar>
 
+<francagianninikurina@gmail.com>
+
+Bibliografía
+<https://drive.google.com/open?id=1yq7u3b2VrIoDD0z8kCztDvEpuW6mek59> 
